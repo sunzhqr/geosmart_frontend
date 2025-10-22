@@ -49,7 +49,7 @@ const OSM_STYLE = {
 
 /* ---------- helpers ---------- */
 
-// «размножаем» каждую точку heatmap в кольца с убывающим весом, чтобы получить гладкие «лужи»
+// «размножаем» каждую точку heatmap в кольца с убывающим весом — получаем гладкие «лужи»
 function densify(pts: HeatPoint[]): HeatPoint[] {
   if (!pts.length) return []
   const lat0 = pts[0].lat
@@ -58,32 +58,27 @@ function densify(pts: HeatPoint[]): HeatPoint[] {
 
   const out: HeatPoint[] = []
   for (const p of pts) {
-    // базовая точка
-    out.push(p)
-    // 3 кольца по 60/120/200 м, 24 направления
-    const radii = [60, 120, 200] // метров
+    out.push(p) // базовая точка
+    const radii = [60, 120, 200] // метры
     const directions = 24
-    for (let rIdx=0; rIdx<radii.length; rIdx++) {
-      const R = radii[rIdx]
+    for (let r=0; r<radii.length; r++) {
+      const R = radii[r]
       for (let k=0; k<directions; k++) {
         const ang = (2*Math.PI*k)/directions
         const lat = p.lat + (R * Math.sin(ang)) * m2degLat
         const lng = p.lng + (R * Math.cos(ang)) * m2degLon
-        // гауссово затухание веса
-        const decay = Math.exp(-Math.pow((rIdx+1)/3, 2))
+        const decay = Math.exp(-Math.pow((r+1)/3, 2)) // плавное затухание
         out.push({ lat, lng, weight: Math.max(0, Math.min(1, p.weight * decay)) })
       }
     }
   }
   return out
 }
-
 function fmtKZT(n:number){
   return new Intl.NumberFormat('ru-KZ',{style:'currency',currency:'KZT',maximumFractionDigits:0}).format(n)
 }
 
 /* ---------- feature collections ---------- */
-
 const forteFC = computed(() => ({
   type:'FeatureCollection',
   features: props.forteAtms.map(a => ({
@@ -145,7 +140,6 @@ function applyVisibility(){
 }
 
 /* ---------- lifecycle ---------- */
-
 onMounted(() => {
   map = new maplibregl.Map({
     container: mapEl.value as HTMLDivElement,
@@ -187,28 +181,14 @@ onMounted(() => {
       }
     })
 
-    // HEATMAP (радужный, «жирный»)
+    // HEATMAP (радужный «жирный» градиент)
     map!.addSource('heat', { type:'geojson', data: heatFC.value })
     map!.addLayer({
       id:'heatmap', type:'heatmap', source:'heat',
       paint:{
-        // вес точки: дадим нелинейный рост, чтобы «ядра» были ярче
-        'heatmap-weight': ['interpolate',['linear'],['get','weight'],
-          0, 0,
-          0.2, 0.2,
-          0.5, 0.6,
-          1, 1
-        ],
-        // радиус растёт с зумом, делаем «лужи» заметными
-        'heatmap-radius': ['interpolate',['linear'],['zoom'],
-          10, 20,
-          12, 30,
-          14, 40,
-          16, 55
-        ],
-        // интенсивность тоже подрастает
-        'heatmap-intensity': ['interpolate',['linear'],['zoom'], 10, 1.2, 14, 2.2],
-        // радуга: прозрачный → синий → циан → зелёный → жёлтый → оранжевый → красный
+        'heatmap-weight': ['interpolate',['linear'],['get','weight'], 0,0, 0.2,0.2, 0.5,0.6, 1,1],
+        'heatmap-radius': ['interpolate',['linear'],['zoom'], 10,20, 12,30, 14,40, 16,55],
+        'heatmap-intensity': ['interpolate',['linear'],['zoom'], 10,1.2, 14,2.2],
         'heatmap-color': [
           'interpolate', ['linear'], ['heatmap-density'],
           0.00, 'rgba(0,0,0,0)',
@@ -219,17 +199,17 @@ onMounted(() => {
           0.85, '#ff7f00',
           1.00, '#ff0000'
         ],
-        'heatmap-opacity': ['interpolate',['linear'],['zoom'], 10, 0.8, 14, 0.6]
+        'heatmap-opacity': ['interpolate',['linear'],['zoom'], 10,0.8, 14,0.6]
       }
-    }, 'forte-points') // перед точками
+    }, 'forte-points')
 
-    // красные ядра на большом зуме
+    // красные «ядра» на большом зуме
     map!.addLayer({
       id:'heat-dots', type:'circle', source:'heat', minzoom:15,
       paint:{
-        'circle-radius': ['interpolate',['linear'],['zoom'], 15, 2, 18, 6],
+        'circle-radius': ['interpolate',['linear'],['zoom'], 15,2, 18,6],
         'circle-color': '#ff0000',
-        'circle-opacity': ['interpolate',['linear'],['zoom'], 15, 0.25, 18, 0.65]
+        'circle-opacity': ['interpolate',['linear'],['zoom'], 15,0.25, 18,0.65]
       }
     })
 

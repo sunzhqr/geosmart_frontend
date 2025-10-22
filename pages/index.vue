@@ -81,7 +81,7 @@ type ATM = { id:number; name:string; lat:number; lng:number; isForte:boolean; di
 type Flow = { fromId:number; toId:number; weight:number }
 type HeatPoint = { lat:number; lng:number; weight:number }
 
-// --- Мок-данные ---
+/* ---------------- ATM/конкуренты/маршруты ---------------- */
 const forteATMs = ref<ATM[]>([
   { id:101, name:'ATM #101', district:'Есиль',    lat:51.128, lng:71.43,  isForte:true,  avgCashBalanceKZT:18_000_000, withdrawalFreqPerDay:320, downtimePct:0.03 },
   { id:213, name:'ATM #213', district:'Сарыарка', lat:51.155, lng:71.41,  isForte:true,  avgCashBalanceKZT:9_600_000,  withdrawalFreqPerDay:110, downtimePct:0.12 },
@@ -99,11 +99,43 @@ const flows = ref<Flow[]>([
   { fromId:402, toId:101, weight:0.25 }
 ])
 
+/* ---------------- Фильтры и heatmap ---------------- */
 const districts = ['Есиль','Сарыарка','Алатау','Байконур','Туран']
 const district = ref<string|null>(null)
-const showHeatmap = ref<boolean>(false)
+const showHeatmap = ref<boolean>(true)
 
-// фильтрация
+/* ✅ Тепловая карта по всей Астане (ручной набор ключевых точек) */
+const heatPoints = ref<HeatPoint[]>([
+  // Есиль (левый берег)
+  { lat:51.128, lng:71.43, weight:0.8 }, { lat:51.131, lng:71.47, weight:0.7 },
+  { lat:51.125, lng:71.49, weight:0.9 }, { lat:51.118, lng:71.51, weight:0.85 },
+  { lat:51.122, lng:71.56, weight:0.75 },{ lat:51.110, lng:71.59, weight:0.6 },
+  { lat:51.115, lng:71.62, weight:0.7 }, { lat:51.130, lng:71.65, weight:0.8 },
+
+  // Байконур
+  { lat:51.145, lng:71.50, weight:0.6 }, { lat:51.140, lng:71.52, weight:0.65 },
+  { lat:51.135, lng:71.54, weight:0.75 },{ lat:51.130, lng:71.57, weight:0.8 },
+  { lat:51.120, lng:71.60, weight:0.7 },
+
+  // Сарыарка (правый берег)
+  { lat:51.170, lng:71.40, weight:0.7 }, { lat:51.180, lng:71.42, weight:0.8 },
+  { lat:51.190, lng:71.45, weight:0.6 }, { lat:51.200, lng:71.48, weight:0.75 },
+  { lat:51.205, lng:71.50, weight:0.9 },
+
+  // Туран / EXPO / аэропорт
+  { lat:51.120, lng:71.45, weight:0.8 }, { lat:51.100, lng:71.47, weight:0.7 },
+  { lat:51.080, lng:71.50, weight:0.9 }, { lat:51.070, lng:71.54, weight:0.85 },
+  { lat:51.060, lng:71.59, weight:0.7 }, { lat:51.050, lng:71.63, weight:0.6 },
+
+  // Доп. активность
+  { lat:51.160, lng:71.43, weight:0.9 }, { lat:51.150, lng:71.48, weight:0.85 },
+  { lat:51.140, lng:71.41, weight:0.8 }, { lat:51.170, lng:71.46, weight:0.9 },
+  { lat:51.130, lng:71.53, weight:0.7 }, { lat:51.190, lng:71.49, weight:0.8 },
+  { lat:51.210, lng:71.52, weight:0.9 }, { lat:51.090, lng:71.44, weight:0.6 },
+  { lat:51.110, lng:71.57, weight:0.7 }, { lat:51.080, lng:71.62, weight:0.8 }
+])
+
+/* ---------------- Вычисляемые данные ---------------- */
 const filteredForte = computed(() => forteATMs.value.filter(a => !district.value || a.district === district.value))
 const filteredCompetitors = computed(() => competitorATMs.value.filter(a => !district.value || a.district === district.value))
 const filteredFlows = computed(() => {
@@ -111,16 +143,6 @@ const filteredFlows = computed(() => {
   return flows.value.filter(f => ids.has(f.fromId) && ids.has(f.toId))
 })
 
-// точки для heatmap (вес берём из частоты снятий, нормируем 0..1)
-const heatPoints = computed<HeatPoint[]>(() =>
-  filteredForte.value.map(a => ({
-    lat: a.lat,
-    lng: a.lng,
-    weight: Math.min((a.withdrawalFreqPerDay ?? 0) / 400, 1)
-  }))
-)
-
-// метрики/инсайты
 const avgLoad = computed(() => {
   const arr = filteredForte.value
   if (!arr.length) return 0
@@ -129,12 +151,14 @@ const avgLoad = computed(() => {
 const idleFunds = computed(() =>
   filteredForte.value.reduce((s,a)=>s+(a.avgCashBalanceKZT||0)*(a.downtimePct||0),0)
 )
+
 const recommendations = [
   { text:'Переместить ATM #213 → ЖК Highvill (↑ трафик +32%)', impact:0.32 },
   { text:'Добавить ATM в район Expo (нет конкурентов)', impact:0.25 }
 ]
 
-function reset(){ district.value=null; showHeatmap.value=false }
+/* ---------------- UI utils ---------------- */
+function reset(){ district.value=null; showHeatmap.value=true }
 function fmtKZT(n:number){
   return new Intl.NumberFormat('ru-KZ',{style:'currency',currency:'KZT',maximumFractionDigits:0}).format(n)
 }
@@ -150,7 +174,7 @@ function fmtKZT(n:number){
 .filters .toggle{display:flex;gap:8px;align-items:center}
 .filters button{background:#0b1223;color:#e5e7eb;border:1px solid #1f2a44;
                 padding:8px 12px;border-radius:10px;cursor:pointer;}
-.grid{display:grid;grid-template-columns:1fr 320px;gap:16px;}
+.grid{display:grid;grid-template-columns:1fr 340px;gap:16px;}
 .card{background:rgba(255,255,255,0.03);border:1px solid #1f2a44;
       border-radius:16px;padding:12px;}
 .map{padding:0;}
